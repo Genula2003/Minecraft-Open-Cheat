@@ -19,6 +19,7 @@
 // Memory addresses
 uintptr_t minecraftBase;
 uintptr_t localPlayer;
+HANDLE hProcess;
 
 // Window and DirectX variables
 HWND gameWindow;
@@ -76,14 +77,14 @@ uintptr_t GetModuleBaseAddress(DWORD processId, const wchar_t* moduleName) {
 template<typename T>
 T ReadMemory(uintptr_t address) {
     T value = {};
-    ReadProcessMemory(GetCurrentProcess(), (LPCVOID)address, &value, sizeof(T), NULL);
+    ReadProcessMemory(hProcess, (LPCVOID)address, &value, sizeof(T), NULL);
     return value;
 }
 
 // Function to write memory
 template<typename T>
 void WriteMemory(uintptr_t address, T value) {
-    WriteProcessMemory(GetCurrentProcess(), (LPVOID)address, &value, sizeof(T), NULL);
+    WriteProcessMemory(hProcess, (LPVOID)address, &value, sizeof(T), NULL);
 }
 
 // Function to get block ID at coordinates
@@ -252,14 +253,15 @@ void LocateDiamonds() {
         );
     }
 
-// Display closest diamond
-if (!diamondPositions.empty()) {
-    D3DXVECTOR3 closestDiamond = diamondPositions[0];
-    DrawDiamondIndicator(closestDiamond);
+    // Display closest diamond
+    if (!diamondPositions.empty()) {
+        D3DXVECTOR3 closestDiamond = diamondPositions[0];
+        DrawDiamondIndicator(closestDiamond);
+    }
 }
 
 // Menu rendering function
-void RenderMenu() ;
+void RenderMenu() {
     if (!device) return;
     
     // Set up rendering state for menu
@@ -297,40 +299,46 @@ void CheatLoop() {
     bool flyEnabled = false;
     bool diamondLocatorEnabled = false;
     
-    while (true) {
+    while (!(GetAsyncKeyState(VK_END) & 1)) {
         // Toggle menu with INSERT key
         if (GetAsyncKeyState(VK_INSERT) & 1) {
             menuVisible = !menuVisible;
         }
-        
-        if (menuVisible) {
-            RenderMenu();
-            
-            // Handle menu options
-            if (GetAsyncKeyState('1') & 1) {
-                espEnabled = !espEnabled;
-            }
-            
-            if (GetAsyncKeyState('2') & 1) {
-                flyEnabled = !flyEnabled;
-                if (flyEnabled) {
-                    EnableFly();
+
+        device->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
+        if (SUCCEEDED(device->BeginScene())) {
+            if (menuVisible) {
+                RenderMenu();
+
+                // Handle menu options
+                if (GetAsyncKeyState('1') & 1) {
+                    espEnabled = !espEnabled;
+                }
+
+                if (GetAsyncKeyState('2') & 1) {
+                    flyEnabled = !flyEnabled;
+                    if (flyEnabled) {
+                        EnableFly();
+                    }
+                }
+
+                if (GetAsyncKeyState('3') & 1) {
+                    diamondLocatorEnabled = !diamondLocatorEnabled;
                 }
             }
-            
-            if (GetAsyncKeyState('3') & 1) {
-                diamondLocatorEnabled = !diamondLocatorEnabled;
+
+            // Apply cheats if enabled
+            if (espEnabled) {
+                RenderESP();
             }
+
+            if (diamondLocatorEnabled) {
+                LocateDiamonds();
+            }
+
+            device->EndScene();
         }
-        
-        // Apply cheats if enabled
-        if (espEnabled) {
-            RenderESP();
-        }
-        
-        if (diamondLocatorEnabled) {
-            LocateDiamonds();
-        }
+        device->Present(NULL, NULL, NULL, NULL);
         
         // Handle flying controls
         if (flyEnabled && localPlayer) {
@@ -405,6 +413,12 @@ bool InitializeMemory() {
         return false;
     }
     
+    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processId);
+    if (!hProcess) {
+        std::cout << "Failed to open process!" << std::endl;
+        return false;
+    }
+
     minecraftBase = GetModuleBaseAddress(processId, L"minecraft.exe");
     if (!minecraftBase) {
         std::cout << "Failed to get Minecraft base address!" << std::endl;
@@ -431,6 +445,11 @@ void Cleanup() {
     if (d3d) {
         d3d->Release();
         d3d = nullptr;
+    }
+
+    if (hProcess) {
+        CloseHandle(hProcess);
+        hProcess = nullptr;
     }
 }
 
