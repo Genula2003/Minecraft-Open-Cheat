@@ -92,23 +92,8 @@ void WriteMemory(uintptr_t address, T value) {
 
 // Function to get block ID at coordinates
 int GetBlockId(int x, int y, int z) {
-    // This is a simplified version - actual implementation would need
-    // to navigate Minecraft's chunk and block data structures
-    uintptr_t world = ReadMemory<uintptr_t>(localPlayer + 0x100);
-    if (!world) return 0;
-    
-    uintptr_t chunkProvider = ReadMemory<uintptr_t>(world + 0x50);
-    if (!chunkProvider) return 0;
-    
-    // Simplified block ID calculation
-    int chunkX = x >> 4;
-    int chunkZ = z >> 4;
-    
-    uintptr_t chunk = ReadMemory<uintptr_t>(chunkProvider + 0x20);
-    if (!chunk) return 0;
-    
-    // This would need proper chunk navigation in real implementation
     // For demonstration purposes, return random diamond ore
+    // Actual implementation would need to navigate chunk structures
     return (rand() % 1000 == 0) ? DIAMOND_ORE_ID : 1; // Stone
 }
 
@@ -184,25 +169,31 @@ void RenderESP() {
     }
     
     // Draw diamond ore ESP
-    for (int x = -50; x < 50; x++) {
-        for (int y = -50; y < 50; y++) {
-            for (int z = -50; z < 50; z++) {
-                int blockId = GetBlockId(x, y, z);
-                if (blockId == DIAMOND_ORE_ID) {
-                    D3DXVECTOR3 screenPos;
-                    D3DXVECTOR3 worldPos(x, y, z);
-                    
-                    D3DXVec3Project(&screenPos, &worldPos, &viewport, &proj, &view, &world);
-                    
-                    if (screenPos.z > 0) {
-                        D3DRECT diamondBox = {
-                            (int)screenPos.x - 10,
-                            (int)screenPos.y - 10,
-                            (int)screenPos.x + 10,
-                            (int)screenPos.y + 10
-                        };
+    uintptr_t world = ReadMemory<uintptr_t>(localPlayer + 0x100);
+    uintptr_t chunkProvider = world ? ReadMemory<uintptr_t>(world + 0x50) : 0;
+    uintptr_t chunk = chunkProvider ? ReadMemory<uintptr_t>(chunkProvider + 0x20) : 0;
+
+    if (chunk) {
+        for (int x = -50; x < 50; x++) {
+            for (int y = -50; y < 50; y++) {
+                for (int z = -50; z < 50; z++) {
+                    int blockId = GetBlockId(x, y, z);
+                    if (blockId == DIAMOND_ORE_ID) {
+                        D3DXVECTOR3 screenPos;
+                        D3DXVECTOR3 worldPos(x, y, z);
+
+                        D3DXVec3Project(&screenPos, &worldPos, &viewport, &proj, &view, &world);
                         
-                        device->Clear(1, &diamondBox, D3DCLEAR_TARGET, D3DCOLOR_ARGB(255, 0, 255, 255), 0, 0);
+                        if (screenPos.z > 0) {
+                            D3DRECT diamondBox = {
+                                (int)screenPos.x - 10,
+                                (int)screenPos.y - 10,
+                                (int)screenPos.x + 10,
+                                (int)screenPos.y + 10
+                            };
+
+                            device->Clear(1, &diamondBox, D3DCLEAR_TARGET, D3DCOLOR_ARGB(255, 0, 255, 255), 0, 0);
+                        }
                     }
                 }
             }
@@ -226,6 +217,12 @@ void EnableFly() {
 
 // Diamond locator function
 void LocateDiamonds() {
+    uintptr_t world = ReadMemory<uintptr_t>(localPlayer + 0x100);
+    uintptr_t chunkProvider = world ? ReadMemory<uintptr_t>(world + 0x50) : 0;
+    uintptr_t chunk = chunkProvider ? ReadMemory<uintptr_t>(chunkProvider + 0x20) : 0;
+
+    if (!chunk) return;
+
     std::vector<D3DXVECTOR3> diamondPositions;
     
     for (int x = -100; x < 100; x++) {
